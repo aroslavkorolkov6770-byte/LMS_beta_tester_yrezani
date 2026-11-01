@@ -9,7 +9,7 @@ export default function UserProfileModal({
     selectedProfileUser, setSelectedProfileUser, userProfiles, usersStats,
     totalRouteSteps, totalBasicsModules, userAvatars, testResults,
     editAuthMode, setEditAuthMode, editAuthLogin, setEditAuthLogin,
-    editAuthPass, setEditAuthPass, handleSaveUserAuth
+    editAuthPass, setEditAuthPass, handleSaveUserAuth, isSavingUserAuth
 }: any) {
     if (!selectedProfileUser) return null;
     if (isSystemWorkspaceAccount(selectedProfileUser)) return null;
@@ -128,6 +128,7 @@ export default function UserProfileModal({
                                 <button
                                     type="button"
                                     className={editAuthMode ? 'vates-button primary compact' : 'vates-button secondary compact'}
+                                    disabled={isSavingUserAuth}
                                     onClick={() => {
                                         if (editAuthMode) {
                                             handleSaveUserAuth();
@@ -139,14 +140,14 @@ export default function UserProfileModal({
                                     }}
                                 >
                                     <CustomIcon name={editAuthMode ? 'check' : 'edit'} size={16} color="currentColor" />
-                                    {editAuthMode ? 'Сохранить' : 'Редактировать'}
+                                    {isSavingUserAuth ? 'Сохраняем...' : editAuthMode ? 'Сохранить' : 'Редактировать'}
                                 </button>
                             </div>
                             <div className="vates-auth-grid">
                                 <label>
                                     <span>Логин доступа</span>
                                     {editAuthMode ? (
-                                        <input value={editAuthLogin} onChange={(event) => setEditAuthLogin(event.target.value)} />
+                                        <input autoComplete="username" maxLength={120} value={editAuthLogin} onChange={(event) => setEditAuthLogin(event.target.value)} disabled={isSavingUserAuth} />
                                     ) : (
                                         <strong>{selectedProfileUser.login}</strong>
                                     )}
@@ -154,12 +155,18 @@ export default function UserProfileModal({
                                 <label>
                                     <span>Новый пароль</span>
                                     {editAuthMode ? (
-                                        <input type="password" value={editAuthPass} onChange={(event) => setEditAuthPass(event.target.value)} placeholder="Введите новый пароль" />
+                                        <input type="password" autoComplete="new-password" value={editAuthPass} onChange={(event) => setEditAuthPass(event.target.value)} placeholder="Оставьте пустым, чтобы сохранить пароль" disabled={isSavingUserAuth} />
                                     ) : (
                                         <strong className="is-muted">Скрыт</strong>
                                     )}
                                 </label>
                             </div>
+                            {editAuthMode && editAuthLogin.trim() !== selectedProfileUser.login && (
+                                <div role="note" style={{ marginTop: '16px', padding: '14px 16px', borderRadius: '12px', border: '1px solid #ddb56b', background: 'var(--app-surface, #fff)', color: 'var(--app-text, #233044)', lineHeight: 1.6 }}>
+                                    Вы меняете логин сотрудника <strong>{selectedProfileUser.name}</strong>. Прежний логин перестанет работать. Передайте сотруднику новый логин.
+                                    {!editAuthPass.trim() && <span> Пароль останется прежним.</span>}
+                                </div>
+                            )}
                         </section>
 
                         <section className="vates-content-card">

@@ -2,6 +2,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import Navigation from '@/app/components/Navigation';
 import CustomIcon from '@/app/components/CustomIcon';
+import { getLoginValidationError } from '@/app/lib/loginValidation';
 
 import { useRouter } from 'next/navigation';
 import {
@@ -23,6 +24,10 @@ function ProfileContent() {
     const [newLogin, setNewLogin] = useState('');
     const [newPass, setNewPass] = useState('');
     const [isNewPasswordVisible, setIsNewPasswordVisible] = useState(false);
+    const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+    const [currentLoginPassword, setCurrentLoginPassword] = useState('');
+    const [isSavingLogin, setIsSavingLogin] = useState(false);
+    const [loginError, setLoginError] = useState('');
 
     const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
 
@@ -152,6 +157,55 @@ function ProfileContent() {
         setIsNewPasswordVisible(false);
     };
 
+    const closeLoginModal = () => {
+        if (isSavingLogin) return;
+        setIsLoginModalOpen(false);
+        setCurrentLoginPassword('');
+        setLoginError('');
+    };
+
+    const handleOpenLoginChange = () => {
+        setNewLogin(userLogin);
+        setCurrentLoginPassword('');
+        setLoginError('');
+        setIsLoginModalOpen(true);
+    };
+
+    const handleChangeLogin = async () => {
+        if (isSavingLogin) return;
+        const nextLogin = newLogin.trim();
+        const validationError = getLoginValidationError(nextLogin);
+        if (validationError || !currentLoginPassword) {
+            setLoginError(validationError || 'Введите текущий пароль');
+            return;
+        }
+
+        setIsSavingLogin(true);
+        setLoginError('');
+        try {
+            const response = await fetch('/api/account/login', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: nextLogin, currentPassword: currentLoginPassword }),
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result?.user) {
+                throw new Error(result?.error || 'Не удалось изменить логин');
+            }
+
+            // Обновляем выбранное браузером хранилище и шапку после обновления серверной сессии.
+            applyClientAuthState(result.user);
+            setUserLogin(result.user.login);
+            window.dispatchEvent(new Event('storage'));
+            setIsLoginModalOpen(false);
+            setCurrentLoginPassword('');
+        } catch (error) {
+            setLoginError(error instanceof Error ? error.message : 'Не удалось изменить логин');
+        } finally {
+            setIsSavingLogin(false);
+        }
+    };
+
     const handleLogout = () => {
         fetch('/api/auth/logout', { method: 'POST' })
             .catch((error) => console.error('Ошибка завершения сессии:', error))
@@ -265,6 +319,7 @@ function ProfileContent() {
                                 <p>{position} · {userLocation}</p>
                                 <div className="vates-profile-person-actions">
                                     <button type="button" className="vates-button secondary compact" onClick={() => setIsEditing(true)}>Редактировать профиль</button>
+                                    <button type="button" className="vates-button secondary compact" onClick={handleOpenLoginChange}>Сменить логин</button>
                                     <button type="button" className="vates-button primary compact" onClick={handleOpenAuthChange}>Сменить пароль</button>
                                     <button type="button" className="vates-button danger compact" onClick={handleLogout}>Выйти</button>
                                 </div>
@@ -379,6 +434,23 @@ function ProfileContent() {
 
                             </div>
                             <div className="vates-own-profile-dialog-actions"><button type="button" className="vates-button secondary" onClick={() => setIsEditing(false)}>Отмена</button><button type="button" className="vates-button primary" onClick={handleSaveProfile}>Сохранить изменения</button></div>
+                        </section>
+                    </div>
+                )}
+
+                {isLoginModalOpen && (
+                    <div className="vates-own-profile-overlay" onClick={closeLoginModal}>
+                        <section className="vates-own-profile-dialog" role="dialog" aria-modal="true" aria-labelledby="own-login-change-title" onClick={event => event.stopPropagation()}>
+                            <header><div><span className="vates-eyebrow">Данные для входа</span><h2 id="own-login-change-title">Смена логина</h2></div><button type="button" className="vates-icon-button" onClick={closeLoginModal} disabled={isSavingLogin} aria-label="Закрыть смену логина"><CustomIcon name="close" size={18} color="currentColor" /></button></header>
+                            <form onSubmit={event => { event.preventDefault(); void handleChangeLogin(); }}>
+                                <div className="vates-own-profile-form-grid">
+                                    <p>После сохранения входите с новым логином и прежним паролем.</p>
+                                    <label><span>Новый логин</span><input autoComplete="username" maxLength={120} value={newLogin} onChange={event => setNewLogin(event.target.value)} placeholder="Введите новый логин" disabled={isSavingLogin} /></label>
+                                    <label><span>Текущий пароль</span><input type="password" autoComplete="current-password" value={currentLoginPassword} onChange={event => setCurrentLoginPassword(event.target.value)} placeholder="Подтвердите текущий пароль" disabled={isSavingLogin} /></label>
+                                    {loginError && <p role="alert">{loginError}</p>}
+                                </div>
+                                <div className="vates-own-profile-dialog-actions"><button type="button" className="vates-button secondary" onClick={closeLoginModal} disabled={isSavingLogin}>Отмена</button><button type="submit" className="vates-button primary" disabled={isSavingLogin}>{isSavingLogin ? 'Сохраняем...' : 'Сохранить логин'}</button></div>
+                            </form>
                         </section>
                     </div>
                 )}

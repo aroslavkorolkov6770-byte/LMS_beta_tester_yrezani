@@ -3,6 +3,7 @@ import { createInAppNotification } from '@/app/lib/inAppNotifications';
 import React, { useState, useEffect } from 'react';
 import Navigation from '@/app/components/Navigation';
 import CustomIcon from '@/app/components/CustomIcon';
+import { getLoginValidationError } from '@/app/lib/loginValidation';
 import { fetchStorageBatch, saveDataToServer } from '@/app/lib/storageClient';
 
 import { useRouter } from 'next/navigation';
@@ -143,6 +144,7 @@ export default function AdminDashboard() {
   const [editAuthMode, setEditAuthMode] = useState(false);
   const [editAuthLogin, setEditAuthLogin] = useState('');
   const [editAuthPass, setEditAuthPass] = useState('');
+  const [isSavingUserAuth, setIsSavingUserAuth] = useState(false);
 
   const [showTestEditor, setShowTestEditor] = useState(false);
   const [testFormData, setTestFormData] = useState({ title: '', timeLimit: 0, quiz: [{ q: '', o: ['', '', '', ''], c: 0 }] });
@@ -453,11 +455,15 @@ export default function AdminDashboard() {
   }, [testType]);
 
   const handleSaveUserAuth = async () => {
+      if (isSavingUserAuth || !selectedProfileUser) return;
       if (isSystemWorkspaceAccount(selectedProfileUser)) {
           return setErrorModal({ show: true, text: 'Профиль системного администратора изолирован от других администраторов.' });
       }
-      if (!editAuthLogin.trim() || !editAuthPass.trim()) return setErrorModal({ show: true, text: "Логин и пароль не могут быть пустыми!" });
+      const loginError = getLoginValidationError(editAuthLogin.trim());
+      if (loginError) return setErrorModal({ show: true, text: loginError });
+      if (editAuthPass.trim() && (editAuthPass.trim().length < 8 || editAuthPass.trim().length > 128)) return setErrorModal({ show: true, text: 'Новый пароль должен содержать от 8 до 128 символов' });
       if (users.find(u => u.login === editAuthLogin.trim() && u.id !== selectedProfileUser.id)) return setErrorModal({ show: true, text: "Логин занят другим пользователем!" });
+      setIsSavingUserAuth(true);
       try {
           const response = await fetch('/api/admin/users/credentials', {
               method: 'PUT',
@@ -478,9 +484,16 @@ export default function AdminDashboard() {
           setSelectedProfileUser({ ...selectedProfileUser, ...result.user });
           setEditAuthMode(false);
           setEditAuthPass('');
+          const currentUserId = localStorage.getItem('current_user_id') || sessionStorage.getItem('current_user_id');
+          if (result.user.id === currentUserId) {
+              applyClientAuthState(result.user);
+              window.dispatchEvent(new Event('storage'));
+          }
           setShowSuccessModal({ show: true, title: 'ДОСТУПЫ ОБНОВЛЕНЫ', text: `Новые данные для входа успешно сохранены.` });
       } catch (error: any) {
           setErrorModal({ show: true, text: error?.message || 'Не удалось сохранить новые доступы' });
+      } finally {
+          setIsSavingUserAuth(false);
       }
   };
 
@@ -747,7 +760,7 @@ export default function AdminDashboard() {
           totalBasicsModules={totalBasicsModules} userAvatars={userAvatars} testResults={testResults}
           editAuthMode={editAuthMode} setEditAuthMode={setEditAuthMode} editAuthLogin={editAuthLogin}
           setEditAuthLogin={setEditAuthLogin} editAuthPass={editAuthPass} setEditAuthPass={setEditAuthPass}
-          handleSaveUserAuth={handleSaveUserAuth}
+          handleSaveUserAuth={handleSaveUserAuth} isSavingUserAuth={isSavingUserAuth}
       />
 
       {showTestEditor && (
